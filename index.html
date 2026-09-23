@@ -12,6 +12,8 @@
 -->
 <script defer src="https://cdn.tailwindcss.com"></script>
 <script>if (window.tailwind) { tailwind.config = { theme: { extend: { colors: { nestle: '#E31837' } } } }; }</script>
+<script defer src="https://cdn.jsdelivr.net/npm/@formkit/autoanimate@0.8.2/dist/autoanimate.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -86,7 +88,21 @@
   .btn.danger:hover:not(:disabled) { background:#FEF2F2; }
   footer.foot { text-align:center; font-size:14px; color:#94A3B8; margin-top:20px; }
   @keyframes fadeSlide { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-  .row-in { animation:fadeSlide .35s ease-out both; }
+  @keyframes flashRow { 0% { background:#D1FAE5; } 100% { background:transparent; } }
+  .row-in { animation:fadeSlide .35s ease-out both, flashRow 2.4s ease-out both; }
+  /* skeleton de carga inicial */
+  .skel td { padding:16px 32px; border-bottom:1px solid #E2E8F0; }
+  .skel .bar { height:22px; border-radius:8px; background:linear-gradient(90deg,#F1F5F9 25%,#E2E8F0 50%,#F1F5F9 75%);
+    background-size:200% 100%; animation:shimmer 1.2s linear infinite; }
+  @keyframes shimmer { to { background-position:-200% 0; } }
+  /* totales siempre visibles */
+  .totals { position:sticky; bottom:0; box-shadow:0 -10px 28px rgba(15,23,42,.10); }
+  /* modo kiosko ?kiosk=1 : oculta controles */
+  body.kiosk .resetrow, body.kiosk footer.foot, body.kiosk #btnAuto { display:none; }
+  .iconbtn { font-size:18px; background:#fff; border:1px solid #E2E8F0; border-radius:12px;
+    width:44px; height:44px; cursor:pointer; flex-shrink:0; }
+  .iconbtn:hover { background:#F8FAFC; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration:.28s; }
   @media (max-width:640px) {
     .wrap { padding-left:20px; padding-right:20px; }
     #clienteNombre { font-size:34px; }
@@ -111,6 +127,7 @@
         <h1>Nestlé B2B <span>· Pedidos en vivo</span></h1>
         <p class="mono">demotest-4c241 · /pedidos</p>
       </div>
+      <button id="btnSound" class="iconbtn" type="button" title="Activar/silenciar sonido">🔊</button>
       <span id="connBadge" class="badge"><span class="dot"></span><span id="connText">Conectando…</span></span>
     </div>
   </header>
@@ -142,9 +159,13 @@
           <thead>
             <tr><th>Producto</th><th class="c">Cant.</th><th class="r">P. unitario</th><th class="r">Subtotal</th></tr>
           </thead>
-          <tbody id="cartBody"></tbody>
+          <tbody id="cartBody">
+            <tr class="skel"><td><div class="bar" style="width:55%"></div></td><td><div class="bar" style="width:44px;margin:0 auto"></div></td><td><div class="bar" style="width:72px;margin-left:auto"></div></td><td><div class="bar" style="width:96px;margin-left:auto"></div></td></tr>
+            <tr class="skel"><td><div class="bar" style="width:40%"></div></td><td><div class="bar" style="width:44px;margin:0 auto"></div></td><td><div class="bar" style="width:72px;margin-left:auto"></div></td><td><div class="bar" style="width:96px;margin-left:auto"></div></td></tr>
+            <tr class="skel"><td><div class="bar" style="width:65%"></div></td><td><div class="bar" style="width:44px;margin:0 auto"></div></td><td><div class="bar" style="width:72px;margin-left:auto"></div></td><td><div class="bar" style="width:96px;margin-left:auto"></div></td></tr>
+          </tbody>
         </table>
-        <div id="emptyState">
+        <div id="emptyState" style="display:none">
           <p class="t1">Esperando productos en vivo…</p>
           <p class="t2 mono">Los ítems del pedido activo aparecerán aquí al instante</p>
         </div>
@@ -178,6 +199,45 @@ const $ = id => document.getElementById(id);
 const fmt = n => '$' + Number(n || 0).toLocaleString('es-MX');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+/* ── pack demo: motion + sonido (todo progresivo y con reduced-motion) ── */
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (new URLSearchParams(location.search).has('kiosk')) document.body.classList.add('kiosk');
+if (window.autoAnimate) autoAnimate($('cartBody'), { duration: 250 });
+
+let AC = null, soundOn = true;
+function blip(freq = 660, dur = .09, delay = 0) {
+  if (!soundOn || RM) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') return;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(.045, AC.currentTime + delay);
+    g.gain.exponentialRampToValueAtTime(.0001, AC.currentTime + delay + dur);
+    o.connect(g).connect(AC.destination);
+    o.start(AC.currentTime + delay); o.stop(AC.currentTime + delay + dur + .02);
+  } catch (e) {}
+}
+addEventListener('pointerdown', () => {
+  try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); AC.resume(); } catch (e) {}
+}, { once: true });
+$('btnSound').addEventListener('click', e => {
+  e.stopPropagation(); soundOn = !soundOn;
+  $('btnSound').textContent = soundOn ? '🔊' : '🔇';
+  if (soundOn) blip(660);
+});
+
+const shown = { lineas: 0, piezas: 0, total: 0 };
+function countUp(el, from, to, money = false) {
+  if (RM || from === to) { el.textContent = money ? fmt(to) : Number(to).toLocaleString('es-MX'); return; }
+  const t0 = performance.now(), dur = 650;
+  (function step(t) {
+    const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3), v = Math.round(from + (to - from) * e);
+    el.textContent = money ? fmt(v) : v.toLocaleString('es-MX');
+    if (p < 1) requestAnimationFrame(step);
+  })(t0);
+}
 
 /* Nombre probable a partir del ID del nodo, ej. PED-JORGE-CASTILLO-001 -> "Jorge Castillo" */
 function nameFromKey(key) {
@@ -261,6 +321,7 @@ function renderActive(freshKeys) {
     $('emptyState').querySelector('.t1').textContent = 'Esperando productos en vivo…';
     $('totalsBar').style.display = 'none';
     $('countBadge').textContent = '0 ítems';
+    shown.lineas = shown.piezas = shown.total = 0;
     return;
   }
   $('clienteNombre').textContent = g.nombre || g.labelNombre;
@@ -283,9 +344,13 @@ function renderActive(freshKeys) {
   }).join('');
 
   $('countBadge').textContent = `${g.items.length} ítem${g.items.length === 1 ? '' : 's'}`;
-  $('tLineas').textContent = g.items.length;
-  $('tPiezas').textContent = g.items.reduce((a, i) => a + (Number(i.cantidad) || 0), 0);
-  $('tTotal').textContent = fmt(g.items.reduce((a, i) => a + (Number(i.subtotal) || 0), 0));
+  const L = g.items.length;
+  const P = g.items.reduce((a, i) => a + (Number(i.cantidad) || 0), 0);
+  const T = g.items.reduce((a, i) => a + (Number(i.subtotal) || 0), 0);
+  countUp($('tLineas'), shown.lineas, L);
+  countUp($('tPiezas'), shown.piezas, P);
+  countUp($('tTotal'), shown.total, T, true);
+  shown.lineas = L; shown.piezas = P; shown.total = T;
   $('lastUpdate').textContent = new Date().toLocaleTimeString('es-MX');
 }
 
@@ -313,8 +378,24 @@ function handleSnapshot(val) {
   const fresh = new Set([...itemKeys].filter(k => !prevItemKeys.has(k)));
   const switched = activeId !== renderActive._last;
   renderActive._last = activeId;
-  renderSelector();
-  renderActive(switched ? itemKeys : fresh);
+
+  // celebración + sonido solo para REGALOS recién llegados (sutil, ejecutivo)
+  const ag = groups.find(g => g.id === activeId);
+  const freshKeys = switched ? itemKeys : fresh;
+  if (ag && freshKeys.size && !RM) {
+    const newItems = ag.items.filter(i => freshKeys.has(i.key));
+    if (newItems.length) {
+      const promos = newItems.filter(i => i.es_promocion).length;
+      if (promos && window.confetti) setTimeout(() => confetti({
+        particleCount: 70, spread: 70, origin: { y: .3 }, disableForReducedMotion: true,
+        colors: ['#059669', '#FFFFFF', '#E31837', '#F59E0B'] }), 250);
+      if (promos) { blip(660, .09); blip(880, .12, .1); } else blip(660);
+    }
+  }
+
+  const paint = () => { renderSelector(); renderActive(freshKeys); };
+  if (switched && !RM && document.startViewTransition) document.startViewTransition(paint);
+  else paint();
   prevItemKeys = itemKeys;
 }
 

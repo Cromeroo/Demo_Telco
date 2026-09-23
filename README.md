@@ -21,6 +21,16 @@ python -m http.server 3000
 
 O simplemente doble clic en `index.html` (requiere internet para el SDK de Firebase).
 
+Modo kiosko para proyección (oculta botones de borrado y pie):
+
+```text
+http://localhost:3000/?kiosk=1
+```
+
+Extras: animación de conteo en totales, flash verde en filas nuevas, confeti sutil
+solo en promociones REGALO, sonido discreto (botón 🔊, requiere un clic previo por
+política del navegador) y transición cruzada al cambiar de pedido.
+
 ## Datos (Firebase RTDB)
 
 - URL: `https://demotest-4c241-default-rtdb.firebaseio.com`
