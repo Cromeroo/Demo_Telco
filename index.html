@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nestlé B2B · Pedidos en vivo</title>
+<!--
+  Light corporativo autocontenido: #F8FAFC / #FFFFFF / #E2E8F0 / #0F172A / #E31837.
+  El CSS va inline porque cdn.tailwindcss.com no resuelve en el entorno de validación;
+  se incluye el script oficial (defer + config protegida) para entornos con acceso.
+  Única dependencia funcional: SDK oficial de Firebase (gstatic).
+-->
+<script defer src="https://cdn.tailwindcss.com"></script>
+<script>if (window.tailwind) { tailwind.config = { theme: { extend: { colors: { nestle: '#E31837' } } } }; }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:#F8FAFC; color:#0F172A; font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif; min-height:100vh; }
+  .mono { font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace; font-variant-numeric:tabular-nums; }
+  .wrap { max-width:1152px; margin:0 auto; padding-left:40px; padding-right:40px; }
+  header.top { background:#FFFFFF; border-bottom:1px solid #E2E8F0; }
+  .top-inner { display:flex; align-items:center; gap:16px; padding-top:20px; padding-bottom:20px; }
+  .logo { width:48px; height:48px; border-radius:12px; background:#E31837; color:#fff;
+          display:grid; place-items:center; font-size:24px; font-weight:800; flex-shrink:0; }
+  .brand { flex:1; min-width:0; }
+  .brand h1 { font-size:30px; font-weight:800; letter-spacing:-0.02em; }
+  .brand h1 span { font-weight:600; color:#64748B; }
+  .brand p { font-size:14px; color:#94A3B8; }
+  .badge { display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:700;
+           padding:8px 16px; border-radius:999px; border:1px solid #CBD5E1; background:#F1F5F9; color:#64748B; flex-shrink:0; }
+  .badge .dot { width:10px; height:10px; border-radius:999px; background:#94A3B8; }
+  .badge.live { border-color:#6EE7B7; background:#ECFDF5; color:#047857; }
+  .badge.live .dot { background:#10B981; animation:blink 1.8s ease-in-out infinite; }
+  .badge.err { border-color:#FCA5A5; background:#FEF2F2; color:#B91C1C; }
+  .badge.err .dot { background:#EF4444; }
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+  main { padding-top:24px; padding-bottom:40px; }
+  .card { background:#FFFFFF; border:1px solid #E2E8F0; border-radius:16px; }
+  .selbar { display:flex; align-items:center; gap:12px; padding:14px 24px; margin-bottom:20px; flex-wrap:wrap; }
+  .selbar .kicker { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.2em; color:#94A3B8; }
+  #orderSelect { flex:1; min-width:220px; font-size:18px; font-weight:700; color:#0F172A;
+    background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:10px 14px; outline:none; cursor:pointer; }
+  #orderSelect:focus { border-color:#E31837; }
+  #modeHint { font-size:14px; color:#64748B; font-weight:600; }
+  #btnAuto { display:none; font-size:14px; font-weight:700; color:#E31837; background:none; border:none; cursor:pointer; text-decoration:underline; }
+  #btnAuto.show { display:inline; }
+  .client { padding:28px 32px; border-left:8px solid #E31837; margin-bottom:24px; }
+  .kicker { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.2em; color:#94A3B8; }
+  #clienteNombre { font-size:48px; line-height:1.1; font-weight:800; letter-spacing:-0.02em; margin-top:4px; word-wrap:break-word; }
+  #clienteTienda { font-size:24px; font-weight:600; color:#64748B; margin-top:4px; }
+  .cart-head { display:flex; align-items:center; gap:12px; padding:20px 32px; border-bottom:1px solid #E2E8F0; }
+  .cart-head h2 { font-size:24px; font-weight:800; }
+  .count { font-size:16px; font-weight:700; padding:4px 12px; border-radius:999px; background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; }
+  table { width:100%; border-collapse:collapse; }
+  thead th { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:#94A3B8;
+             border-bottom:1px solid #E2E8F0; padding:16px 32px; text-align:left; }
+  thead th.c, tbody td.c { text-align:center; }
+  thead th.r, tbody td.r { text-align:right; }
+  tbody td { padding:16px 32px; border-bottom:1px solid #E2E8F0; vertical-align:middle; }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr.promo { background:#F0FDF4; }
+  .pname { font-size:21px; font-weight:700; }
+  .psub { font-size:16px; color:#64748B; font-weight:500; }
+  .qty { font-size:24px; font-weight:700; }
+  .price, .sub { font-size:20px; color:#475569; white-space:nowrap; }
+  .sub { font-size:24px; font-weight:700; }
+  tr.promo .price, tr.promo .sub { color:#047857; }
+  .gift { display:inline-block; font-size:13px; font-weight:800; letter-spacing:.12em; padding:4px 12px;
+          border-radius:999px; background:#059669; color:#fff; margin-left:12px; vertical-align:middle; }
+  .gratis { display:block; font-size:13px; font-weight:800; letter-spacing:.12em; color:#059669; }
+  #emptyState { padding:56px 32px; text-align:center; }
+  #emptyState .t1 { font-size:24px; font-weight:600; color:#94A3B8; }
+  #emptyState .t2 { font-size:14px; color:#94A3B8; margin-top:8px; }
+  .totals { padding:24px 32px; border-top:3px solid #0F172A; background:#F8FAFC;
+            border-radius:0 0 16px 16px; display:flex; flex-wrap:wrap; gap:16px 48px; align-items:flex-end; }
+  .totals .lab { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:#94A3B8; }
+  .totals .big { font-size:40px; font-weight:700; }
+  .totals .grand { margin-left:auto; text-align:right; }
+  .totals .grand .num { font-size:52px; font-weight:700; color:#E31837; }
+  .resetrow { display:flex; gap:12px; justify-content:center; margin-top:24px; flex-wrap:wrap; }
+  .btn { font-size:15px; font-weight:700; padding:10px 20px; border-radius:12px; cursor:pointer; border:1px solid #E2E8F0; background:#fff; color:#64748B; }
+  .btn:hover:not(:disabled) { background:#F8FAFC; }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn.danger { color:#B91C1C; border-color:#FECACA; }
+  .btn.danger:hover:not(:disabled) { background:#FEF2F2; }
+  footer.foot { text-align:center; font-size:14px; color:#94A3B8; margin-top:20px; }
+  @keyframes fadeSlide { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  .row-in { animation:fadeSlide .35s ease-out both; }
+  @media (max-width:640px) {
+    .wrap { padding-left:20px; padding-right:20px; }
+    #clienteNombre { font-size:34px; }
+    .brand h1 { font-size:22px; }
+    thead th, tbody td { padding-left:16px; padding-right:16px; }
+    .totals .grand { margin-left:0; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "firebase/app": "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js",
+  "firebase/database": "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js"
+}}
+</script>
+</head>
+<body>
+
+  <header class="top">
+    <div class="wrap top-inner">
+      <div class="logo">N</div>
+      <div class="brand">
+        <h1>Nestlé B2B <span>· Pedidos en vivo</span></h1>
+        <p class="mono">demotest-4c241 · /pedidos</p>
+      </div>
+      <span id="connBadge" class="badge"><span class="dot"></span><span id="connText">Conectando…</span></span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Selector de pedido -->
+    <section class="card selbar">
+      <span class="kicker">Pedido</span>
+      <select id="orderSelect" aria-label="Historial de pedidos"><option value="">Sin pedidos</option></select>
+      <span id="modeHint">Siguiendo el más reciente en vivo</span>
+      <button id="btnAuto" type="button">Volver a en vivo</button>
+    </section>
+
+    <!-- 1 · Ficha del cliente -->
+    <section class="card client">
+      <p class="kicker">Cliente</p>
+      <p id="clienteNombre">Sin pedidos…</p>
+      <p id="clienteTienda">—</p>
+    </section>
+
+    <!-- 2 · Carrito en tiempo real -->
+    <section class="card">
+      <div class="cart-head">
+        <h2>Carrito</h2>
+        <span id="countBadge" class="count mono">0 ítems</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr><th>Producto</th><th class="c">Cant.</th><th class="r">P. unitario</th><th class="r">Subtotal</th></tr>
+          </thead>
+          <tbody id="cartBody"></tbody>
+        </table>
+        <div id="emptyState">
+          <p class="t1">Esperando productos en vivo…</p>
+          <p class="t2 mono">Los ítems del pedido activo aparecerán aquí al instante</p>
+        </div>
+      </div>
+      <div id="totalsBar" class="totals" style="display:none">
+        <div><p class="lab">Líneas</p><p id="tLineas" class="big mono">0</p></div>
+        <div><p class="lab">Piezas</p><p id="tPiezas" class="big mono">0</p></div>
+        <div class="grand"><p class="lab">Total estimado (MXN)</p><p id="tTotal" class="num mono">$0</p></div>
+      </div>
+    </section>
+
+    <div class="resetrow">
+      <button id="btnDelete" class="btn danger" type="button" disabled>Borrar pedido actual</button>
+      <button id="btnWipe" class="btn" type="button" disabled>Vaciar historial (/pedidos)</button>
+    </div>
+
+    <footer class="foot">
+      Sincronizado en tiempo real · última actualización <span id="lastUpdate" class="mono">—</span>
+    </footer>
+  </main>
+
+<script type="module">
+import { initializeApp } from 'firebase/app';
+import { getDatabase, ref, onValue, remove } from 'firebase/database';
+
+const DB_URL = 'https://demotest-4c241-default-rtdb.firebaseio.com';
+const db = getDatabase(initializeApp({ databaseURL: DB_URL }));
+const pedidosRef = ref(db, 'pedidos');
+
+const $ = id => document.getElementById(id);
+const fmt = n => '$' + Number(n || 0).toLocaleString('es-MX');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+/* Nombre probable a partir del ID del nodo, ej. PED-JORGE-CASTILLO-001 -> "Jorge Castillo" */
+function nameFromKey(key) {
+  const m = String(key).match(/^PED-(.+?)(?:-\d+)?$/i);
+  if (!m) return null;
+  return m[1].split(/[-_]+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+function prettyKey(key) {
+  const n = nameFromKey(key);
+  if (n) return n;
+  return String(key).replace(/[-_]+/g, ' ');
+}
+
+/* ── estado ── */
+let rawPrev = {};          // key -> JSON (detección de cambios)
+let touch = {};            // key -> timestamp último cambio visto
+let groups = [];           // [{id,nombre,tienda,keys,items:[{key,...}]}]
+let mode = 'auto';         // 'auto' | 'manual'
+let manualId = null;
+let activeId = null;
+let prevItemKeys = new Set();
+
+function setConn(state) {
+  const b = $('connBadge');
+  b.className = 'badge' + (state === 'live' ? ' live' : state === 'error' ? ' err' : '');
+  $('connText').textContent = state === 'live' ? 'EN VIVO' : state === 'error' ? 'SIN CONEXIÓN' : 'Conectando…';
+}
+
+/* Agrupa nodos crudos en pedidos: mismo cliente normalizado = mismo pedido.
+   Un nodo con solo cliente y otro con solo items (ID relacionado) se fusionan. */
+function buildGroups(val) {
+  const map = new Map();
+  for (const [key, node] of Object.entries(val || {})) {
+    if (!node || typeof node !== 'object') continue;
+    const owner = (node.cliente && node.cliente.nombre) || nameFromKey(key);
+    const gid = owner ? norm(owner) : ('key:' + key);
+    if (!map.has(gid)) map.set(gid, { id: gid, nombre: null, tienda: null, keys: [], items: [] });
+    const g = map.get(gid);
+    g.keys.push(key);
+    if (node.cliente && node.cliente.nombre && !g.nombre) {
+      g.nombre = node.cliente.nombre;
+      g.tienda = node.cliente.tienda || null;
+    }
+    for (const [ik, it] of Object.entries(node.items || {})) {
+      if (it && typeof it === 'object') g.items.push({ key: key + '/' + ik, ...it });
+    }
+  }
+  const out = [...map.values()].map(g => ({
+    ...g,
+    labelNombre: g.nombre || prettyKey(g.keys[0]),
+    touch: Math.max(0, ...g.keys.map(k => touch[k] || 0)),
+  }));
+  out.sort((a, b) => (b.touch - a.touch) || (b.items.length - a.items.length) || (a.id < b.id ? 1 : -1));
+  return out;
+}
+
+function renderSelector() {
+  const sel = $('orderSelect');
+  const cur = mode === 'auto' ? '__auto__' : manualId;
+  sel.innerHTML = groups.length
+    ? `<option value="__auto__">● En vivo · más reciente</option>` + groups.map(g =>
+        `<option value="${esc(g.id)}">${esc(g.labelNombre)}${g.tienda ? ' — ' + esc(g.tienda) : ''} · ${g.items.length} ítem${g.items.length === 1 ? '' : 's'}</option>`).join('')
+    : `<option value="">Sin pedidos</option>`;
+  sel.value = groups.length ? cur : '';
+  sel.disabled = !groups.length;
+  $('modeHint').textContent = !groups.length ? 'Esperando datos en /pedidos'
+    : mode === 'auto'
+      ? `Siguiendo el más reciente en vivo · viendo: ${(groups.find(g => g.id === activeId) || {}).labelNombre || '—'}`
+      : 'Viendo pedido seleccionado';
+  $('btnAuto').classList.toggle('show', mode === 'manual' && groups.length > 0);
+  $('btnDelete').disabled = $('btnWipe').disabled = !groups.length;
+}
+
+function renderActive(freshKeys) {
+  const g = groups.find(x => x.id === activeId);
+  if (!g) {
+    $('clienteNombre').textContent = 'Sin pedidos…';
+    $('clienteTienda').textContent = '—';
+    $('cartBody').innerHTML = '';
+    $('emptyState').style.display = 'block';
+    $('emptyState').querySelector('.t1').textContent = 'Esperando productos en vivo…';
+    $('totalsBar').style.display = 'none';
+    $('countBadge').textContent = '0 ítems';
+    return;
+  }
+  $('clienteNombre').textContent = g.nombre || g.labelNombre;
+  $('clienteTienda').textContent = g.tienda || '—';
+  $('emptyState').style.display = g.items.length ? 'none' : 'block';
+  $('emptyState').querySelector('.t1').textContent = 'Este pedido aún no tiene productos…';
+  $('totalsBar').style.display = g.items.length ? 'flex' : 'none';
+
+  $('cartBody').innerHTML = g.items.map(it => {
+    const promo = !!it.es_promocion;
+    return `<tr class="${freshKeys.has(it.key) ? 'row-in' : ''}${promo ? ' promo' : ''}">
+      <td><span class="pname">${esc(it.nombre || 'Producto sin nombre')}</span>${promo
+        ? '<span class="gift">REGALO</span>'
+        : (it.categoria ? `<span class="psub"><br>${esc(it.categoria)} · ${esc(it.presentacion || 'pzas')}</span>`
+                        : (it.presentacion ? `<span class="psub"><br>${esc(it.presentacion)}</span>` : ''))}</td>
+      <td class="c qty mono">×${esc(it.cantidad ?? 1)}</td>
+      <td class="r price mono">${promo ? '$0<span class="gratis">GRATIS</span>' : fmt(it.precio_unitario)}</td>
+      <td class="r sub mono">${promo ? '$0<span class="gratis">GRATIS</span>' : fmt(it.subtotal)}</td>
+    </tr>`;
+  }).join('');
+
+  $('countBadge').textContent = `${g.items.length} ítem${g.items.length === 1 ? '' : 's'}`;
+  $('tLineas').textContent = g.items.length;
+  $('tPiezas').textContent = g.items.reduce((a, i) => a + (Number(i.cantidad) || 0), 0);
+  $('tTotal').textContent = fmt(g.items.reduce((a, i) => a + (Number(i.subtotal) || 0), 0));
+  $('lastUpdate').textContent = new Date().toLocaleTimeString('es-MX');
+}
+
+let lastVal = {};
+
+function handleSnapshot(val) {
+  lastVal = val || {};
+  setConn('live');
+  const now = Date.now();
+  for (const [k, node] of Object.entries(lastVal)) {
+    const s = JSON.stringify(node);
+    if (rawPrev[k] !== s) touch[k] = now;
+    rawPrev[k] = s;
+  }
+  for (const k of Object.keys(rawPrev)) if (!(k in lastVal)) { delete rawPrev[k]; delete touch[k]; }
+
+  groups = buildGroups(lastVal);
+  if (!groups.length) { activeId = null; }
+  else if (mode === 'auto' || !groups.some(g => g.id === manualId)) {
+    if (mode === 'manual' && !groups.some(g => g.id === manualId)) { mode = 'auto'; manualId = null; }
+    activeId = groups[0].id;
+  } else activeId = manualId;
+
+  const itemKeys = new Set((groups.find(g => g.id === activeId) || { items: [] }).items.map(i => i.key));
+  const fresh = new Set([...itemKeys].filter(k => !prevItemKeys.has(k)));
+  const switched = activeId !== renderActive._last;
+  renderActive._last = activeId;
+  renderSelector();
+  renderActive(switched ? itemKeys : fresh);
+  prevItemKeys = itemKeys;
+}
+
+onValue(pedidosRef, snap => handleSnapshot(snap.val()), err => { console.error(err); setConn('error'); });
+
+$('orderSelect').addEventListener('change', e => {
+  const v = e.target.value;
+  if (v === '__auto__') { mode = 'auto'; manualId = null; }
+  else if (v) { mode = 'manual'; manualId = v; }
+  prevItemKeys = new Set();
+  renderActive._last = null;
+  handleSnapshot(lastVal); // re-render inmediato con datos en caché
+});
+
+$('btnAuto').addEventListener('click', () => {
+  mode = 'auto'; manualId = null; prevItemKeys = new Set(); renderActive._last = null;
+  renderSelector();
+  if (groups.length) { activeId = groups[0].id; renderActive(new Set(groups[0].items.map(i => i.key))); prevItemKeys = new Set(groups[0].items.map(i => i.key)); }
+});
+
+$('btnDelete').addEventListener('click', async () => {
+  const g = groups.find(x => x.id === activeId);
+  if (!g) return;
+  if (!confirm(`¿Borrar el pedido "${g.labelNombre}" (${g.keys.length} nodo(s))?`)) return;
+  for (const k of g.keys) await remove(ref(db, 'pedidos/' + k));
+});
+
+$('btnWipe').addEventListener('click', async () => {
+  if (!confirm('¿Vaciar TODO el historial de /pedidos? Esta acción no se puede deshacer.')) return;
+  await remove(pedidosRef);
+});
+</script>
+</body>
+</html>
